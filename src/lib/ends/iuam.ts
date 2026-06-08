@@ -137,6 +137,15 @@ async function cloudflare(data: CloudflareData, page: any): Promise<any> {
         await client.send("Network.clearBrowserCookies");
       } catch (e) { }
 
+      // Apply proxy authentication if provided
+      if (data.proxy) {
+        const proxyAuth = {
+          username: data.proxy.username || "",
+          password: data.proxy.password || "",
+        };
+        await page.authenticate(proxyAuth);
+      }
+
       await page.setRequestInterception(true);
       page.on("request", requestHandler);
       page.on("response", responseHandler);
@@ -155,12 +164,12 @@ async function cloudflare(data: CloudflareData, page: any): Promise<any> {
         },
       });
 
-      try {
-        await page.goto(data.url, {
-          waitUntil: "domcontentloaded",
-          timeout,
-        });
-      } catch (navigationError: any) {}
+      // Set proxy for page navigation if needed (Puppeteer launch args should handle proxy)
+      // The proxy authentication above handles authenticated proxies
+      await page.goto(data.url, {
+        waitUntil: "domcontentloaded",
+        timeout,
+      });
     } catch (err) {
       console.error("[Setup] Unexpected error in iuam solver:", err);
       if (!isResolved) {

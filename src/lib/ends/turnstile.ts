@@ -27,10 +27,17 @@ export interface TurnstileData {
   cdata?: string;
   action?: string;
   extractCdata?: boolean; // If true, intercept and return cdata from Cloudflare response
+  proxy?: {
+    protocol?: string;
+    host: string;
+    port: number | string;
+    username?: string;
+    password?: string;
+  };
 }
 
-async function turnstile(data: TurnstileData, page: Page): Promise<string | string[] | { token: string | string[], cdata: string | null }> {
-  const { url, sitekey, cdata, action, extractCdata } = data;
+async function turnstile(data: TurnstileData, page: Page): Promise<string | string[] | { token: string | string[], cdata: string | null, user_agent: string }> {
+  const { url, sitekey, cdata, action, extractCdata, proxy } = data;
   if (!url) throw new Error("Missing url parameter");
   if (!sitekey) throw new Error("Missing sitekey parameter");
 
@@ -42,6 +49,7 @@ async function turnstile(data: TurnstileData, page: Page): Promise<string | stri
 
   // Variable to capture cdata from Cloudflare's response
   let capturedCdata: string | null = null;
+  let userAgent: string = "";
 
   const cl = setTimeout(() => {
     if (!isResolved) {}
@@ -179,10 +187,21 @@ async function turnstile(data: TurnstileData, page: Page): Promise<string | stri
   };
 
   try {
+    // Apply proxy if provided
+    if (proxy) {
+      await page.authenticate({
+        username: proxy.username || "",
+        password: proxy.password || "",
+      });
+    }
+
     await page.setRequestInterception(true);
     page.on("request", requestHandler);
 
     await page.goto(url, { waitUntil: "domcontentloaded" });
+
+    // Capture user agent
+    userAgent = await page.evaluate(() => navigator.userAgent).catch(() => "");
 
     // If extractCdata is enabled, try to extract cdata from the widget after it loads
     if (extractCdata) {
@@ -231,7 +250,7 @@ async function turnstile(data: TurnstileData, page: Page): Promise<string | stri
 
     // If extractCdata is enabled, return cdata along with the token
     if (extractCdata) {
-      const result: any = { token: tokens, cdata: capturedCdata };
+      const result: any = { token: tokens, cdata: capturedCdata, user_agent: userAgent };
       if (!Array.isArray(sitekey) && tokens.length === 1) {
         result.token = tokens[0];
       }
