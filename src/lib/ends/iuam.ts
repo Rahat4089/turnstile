@@ -8,6 +8,7 @@ const __dirname = path.dirname(__filename);
 
 interface CloudflareData {
   url: string;
+  proxy_url?: string; // Optional proxy URL string (host:port:user:pass)
   proxy?: {
     protocol?: string;
     host: string;

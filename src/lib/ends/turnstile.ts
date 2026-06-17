@@ -27,6 +27,7 @@ export interface TurnstileData {
   cdata?: string;
   action?: string;
   extractCdata?: boolean; // If true, intercept and return cdata from Cloudflare response
+  proxy_url?: string; // Optional proxy URL string (host:port:user:pass)
   proxy?: {
     protocol?: string;
     host: string;
@@ -36,7 +37,7 @@ export interface TurnstileData {
   };
 }
 
-async function turnstile(data: TurnstileData, page: Page): Promise<string | string[] | { token: string | string[], cdata: string | null, user_agent: string }> {
+async function turnstile(data: TurnstileData, page: Page): Promise<{ token: string | string[], cdata?: string | null, user_agent: string }> {
   const { url, sitekey, cdata, action, extractCdata, proxy } = data;
   if (!url) throw new Error("Missing url parameter");
   if (!sitekey) throw new Error("Missing sitekey parameter");
@@ -248,20 +249,15 @@ async function turnstile(data: TurnstileData, page: Page): Promise<string | stri
     clearTimeout(cl);
     page.off("request", requestHandler);
 
-    // If extractCdata is enabled, return cdata along with the token
+    // Always return user_agent in the response
+    const result: any = { token: tokens, user_agent: userAgent };
     if (extractCdata) {
-      const result: any = { token: tokens, cdata: capturedCdata, user_agent: userAgent };
-      if (!Array.isArray(sitekey) && tokens.length === 1) {
-        result.token = tokens[0];
-      }
-      return result;
+      result.cdata = capturedCdata;
     }
-
     if (!Array.isArray(sitekey) && tokens.length === 1) {
-      return tokens[0];
+      result.token = tokens[0];
     }
-
-    return tokens;
+    return result;
   } catch (e) {
     isResolved = true;
     clickerActive = false;

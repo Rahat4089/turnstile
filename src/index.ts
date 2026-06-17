@@ -5,6 +5,40 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
+/**
+ * Parse a proxy URL string into a structured proxy object.
+ * Supported formats:
+ *   host:port:username:password
+ *   protocol://username:password@host:port
+ *   protocol://host:port:username:password
+ *   host:port (no auth)
+ */
+function parseProxyUrl(proxyUrl: string): { protocol: string; host: string; port: number | string; username?: string; password?: string } {
+  // If already an object, return as-is (shouldn't happen here but safety)
+  if (typeof proxyUrl !== "string") return proxyUrl as any;
+
+  // Format: protocol://username:password@host:port
+  const urlMatch = proxyUrl.match(/^(https?|socks[45]?):\/\/([^:]+):([^@]+)@([^:]+):(\d+)$/);
+  if (urlMatch) {
+    return { protocol: urlMatch[1], host: urlMatch[4], port: urlMatch[5], username: urlMatch[2], password: urlMatch[3] };
+  }
+
+  // Format: protocol://host:port:username:password
+  const protoMatch = proxyUrl.match(/^(https?|socks[45]?):\/\/(.+)$/);
+  if (protoMatch) {
+    const parts = protoMatch[2].split(":");
+    if (parts.length === 4) return { protocol: protoMatch[1], host: parts[0], port: parts[1], username: parts[2], password: parts[3] };
+    if (parts.length === 2) return { protocol: protoMatch[1], host: parts[0], port: parts[1] };
+  }
+
+  // Format: host:port:username:password
+  const parts = proxyUrl.split(":");
+  if (parts.length === 4) return { protocol: "http", host: parts[0], port: parts[1], username: parts[2], password: parts[3] };
+  if (parts.length === 2) return { protocol: "http", host: parts[0], port: parts[1] };
+
+  throw new Error(`Invalid proxy URL format: ${proxyUrl}`);
+}
+
 const port = Number(process.env.PORT) || 8742;
 
 (global as any).browserLimit = Number(process.env.browserLimit) || 500;
@@ -93,7 +127,16 @@ const server = Bun.serve({
       req.signal.addEventListener("abort", abortHandler);
 
       try {
-        if (data.mode === "iuam") {
+        // Parse proxy_url string into proxy object if provided
+      if (data.proxy_url && !data.proxy) {
+        try {
+          data.proxy = parseProxyUrl(data.proxy_url);
+        } catch (e: any) {
+          return Response.json({ message: e.message, success: false }, { status: 400 });
+        }
+      }
+
+      if (data.mode === "iuam") {
           page = await getPage({ newPage: true, proxy: data.proxy, mode: "iuam" });
           result = await iuam(data as any, page)
             .then((r: any) => {
@@ -109,6 +152,7 @@ const server = Bun.serve({
                   Cookie: `cf_clearance=${cf_clearance};`,
                   "User-Agent": user_agent,
                 },
+                user_agent,
                 success: true,
               };
             })
@@ -122,8 +166,10 @@ const server = Bun.serve({
           result = await turnstile(data as any, page)
             .then((response: any) => {
               // Handle both simple token response and cdata extraction response
-              if (response && typeof response === "object" && response.cdata !== undefined) {
-                return { token: response.token, cdata: response.cdata, success: true };
+              if (response && typeof response === "object" && response.user_agent !== undefined) {
+                const res: any = { token: response.token, user_agent: response.user_agent, success: true };
+                if (response.cdata !== undefined) res.cdata = response.cdata;
+                return res;
               }
               return { token: response, success: true };
             })
@@ -158,6 +204,7 @@ const server = Bun.serve({
       if ("token" in result) finalResult.token = result.token;
       if ("cdata" in result) finalResult.cdata = result.cdata;
       if ("headers" in result) finalResult.headers = result.headers;
+      if ("user_agent" in result) finalResult.user_agent = result.user_agent;
       if ("code" in result) finalResult.code = result.code;
       if ("message" in result) finalResult.message = result.message;
       finalResult.elapsed = result.elapsed;
