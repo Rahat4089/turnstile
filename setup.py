@@ -196,8 +196,15 @@ def main():
     print("  Turnstile Solver - Server Setup Script")
     print("=" * 60)
 
-    # Check if running as root
-    if os.geteuid() != 0:
+    # Windows is not supported
+    if platform.system() == "Windows":
+        print("[!] This setup script is for Linux servers only.")
+        print("[!] On Windows, install Bun manually: https://bun.sh")
+        print("[!] Then run: bun install && bun start")
+        sys.exit(1)
+
+    # Check if running as root (Linux only)
+    if hasattr(os, "geteuid") and os.geteuid() != 0:
         print("[!] This script must be run as root (use sudo).")
         sys.exit(1)
 
