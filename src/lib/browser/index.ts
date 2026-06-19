@@ -11,7 +11,7 @@ const __dirname = dirname(__filename);
 // ─── Config ───────────────────────────────────────────────────────────────────
 // One isolated browser per slot — each handles exactly 1 request at a time.
 // 40 browsers = 40 concurrent solves = ~800 CPM at ~3s/solve.
-const BROWSER_COUNT = Number(process.env.BROWSER_COUNT) || 40;
+const BROWSER_COUNT = Number(process.env.BROWSER_COUNT) || 20;
 let headless = process.env.HEADLESS !== "false";
 // ──────────────────────────────────────────────────────────────────────────────
 
